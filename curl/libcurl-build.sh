@@ -97,7 +97,7 @@ while getopts "v:s:t:i:nbxh\?" o; do
 done
 shift $((OPTIND-1))
 
-OPENSSL="${PWD}/../openssl"  
+OPENSSL="${PWD}/../libressl"  
 DEVELOPER=`xcode-select -print-path`
 
 # HTTP2 support

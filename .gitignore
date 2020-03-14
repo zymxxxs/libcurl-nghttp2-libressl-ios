@@ -1,0 +1,11 @@
+/examples/iOS Test App/libs/*.a
+/archive/*
+
+/curl/*
+!/curl/*.sh
+
+/libressl/*
+!/libressl/*.sh
+
+/nghttp2/*
+!/nghttp2/*.sh

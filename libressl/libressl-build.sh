@@ -83,11 +83,11 @@ DEVELOPER=`xcode-select -print-path`
 buildMac()
 {
 	ARCH=$1
+	HOST="x86_64-apple-darwin"
 
 	echo -e "${subbold}Building ${LIBRESSL_VERSION} for ${archbold}${ARCH}${dim}"
 
 	TARGET="darwin-i386-cc"
-
 	if [[ $ARCH == "x86_64" ]]; then
 		TARGET="--target=darwin64-x86_64-cc"
 	fi
@@ -96,7 +96,7 @@ buildMac()
 
 	pushd . > /dev/null
 	cd "${LIBRESSL_VERSION}"
-	./Configure --disable-asm ${TARGET} --enable-shared=false --prefix="/tmp/${LIBRESSL_VERSION}-${ARCH}" --with-openssldir="/tmp/${LIBRESSL_VERSION}-${ARCH}" $CUSTOMCONFIG &> "/tmp/${LIBRESSL_VERSION}-${ARCH}.log"
+	./Configure  --host=${HOST} --enable-shared=false --prefix="/tmp/${LIBRESSL_VERSION}-${ARCH}" --with-openssldir="/tmp/${LIBRESSL_VERSION}-${ARCH}" $CUSTOMCONFIG &> "/tmp/${LIBRESSL_VERSION}-${ARCH}.log"
 	make >> "/tmp/${LIBRESSL_VERSION}-${ARCH}.log" 2>&1
 	make install_sw >> "/tmp/${LIBRESSL_VERSION}-${ARCH}.log" 2>&1
 	# Keep openssl binary for Mac version
@@ -123,19 +123,19 @@ buildIOS()
 	export CROSS_SDK="${PLATFORM}${IOS_SDK_VERSION}.sdk"
 	export BUILD_TOOLS="${DEVELOPER}"
 	export CC="${BUILD_TOOLS}/usr/bin/gcc"
+    export CFLAGS="-arch ${ARCH} -pipe -Os -gdwarf-2 -isysroot ${CROSS_TOP}/SDKs/${CROSS_SDK} -miphoneos-version-min=${IOS_MIN_SDK_VERSION} ${CC_BITCODE_FLAG}"
+	export LDFLAGS="-arch ${ARCH} -isysroot ${CROSS_TOP}/SDKs/${CROSS_SDK}"
 
 	echo -e "${subbold}Building ${LIBRESSL_VERSION} for ${PLATFORM} ${IOS_SDK_VERSION} ${archbold}${ARCH}${dim}"
 
-	if [[ "${ARCH}" == *"arm64"* || "${ARCH}" == "arm64e" ]]; then
-		./Configure --disable-asm --host="arm-apple-darwin" --enable-shared=false --prefix="/tmp/${LIBRESSL_VERSION}-iOS-${ARCH}" --with-openssldir="/tmp/${LIBRESSL_VERSION}-iOS-${ARCH}" $CUSTOMCONFIG &> "/tmp/${LIBRESSL_VERSION}-iOS-${ARCH}.log"
+	if [[ "${ARCH}" == "arm64" || "${ARCH}" == "arm64e" ]]; then
+		./Configure  --host="arm-apple-darwin" --enable-shared=false --prefix="/tmp/${LIBRESSL_VERSION}-iOS-${ARCH}" --with-openssldir="/tmp/${LIBRESSL_VERSION}-iOS-${ARCH}" $CUSTOMCONFIG &> "/tmp/${LIBRESSL_VERSION}-iOS-${ARCH}.log"
 	else
-	    ./Configure --host="${ARCH}-apple-darwin" DSO_LDFLAGS=-fembed-bitcode --prefix="/tmp/${LIBRESSL_VERSION}-iOS-${ARCH}" --enable-shared=false --with-openssldir="/tmp/${LIBRESSL_VERSION}-iOS-${ARCH}" $CUSTOMCONFIG &> "/tmp/${LIBRESSL_VERSION}-iOS-${ARCH}.log"
-	fi
-	# add -isysroot to CC=
-	sed -ie "s!^CFLAGS=!CFLAGS=-isysroot ${CROSS_TOP}/SDKs/${CROSS_SDK} -miphoneos-version-min=${IOS_MIN_SDK_VERSION} !" "Makefile"
+	    ./Configure  --host="${ARCH}-apple-darwin" --enable-shared=false --prefix="/tmp/${LIBRESSL_VERSION}-iOS-${ARCH}" --with-openssldir="/tmp/${LIBRESSL_VERSION}-iOS-${ARCH}" $CUSTOMCONFIG &> "/tmp/${LIBRESSL_VERSION}-iOS-${ARCH}.log"
+	fi 
 
-	make >> "/tmp/${LIBRESSL_VERSION}-iOS-${ARCH}.log" 2>&1
-	make install_sw >> "/tmp/${LIBRESSL_VERSION}-iOS-${ARCH}.log" 2>&1
+	make -j8>> "/tmp/${LIBRESSL_VERSION}-iOS-${ARCH}.log" 2>&1
+	make install >> "/tmp/${LIBRESSL_VERSION}-iOS-${ARCH}.log" 2>&1
 	make clean >> "/tmp/${LIBRESSL_VERSION}-iOS-${ARCH}.log" 2>&1
 	popd > /dev/null
 }
@@ -151,32 +151,25 @@ buildTVOS()
 		PLATFORM="AppleTVSimulator"
 	else
 		PLATFORM="AppleTVOS"
-		sed -ie "s!static volatile sig_atomic_t intr_signal;!static volatile intr_signal;!" "crypto/ui/ui_openssl.c"
 	fi
 
 	export $PLATFORM
 	export CROSS_TOP="${DEVELOPER}/Platforms/${PLATFORM}.platform/Developer"
-	export CROSS_SDK="${PLATFORM}${TVOS_SDK_VERSION}.sdk"
+	export CROSS_SDK="${PLATFORM}${IOS_SDK_VERSION}.sdk"
 	export BUILD_TOOLS="${DEVELOPER}"
-	export CC="${BUILD_TOOLS}/usr/bin/gcc -fembed-bitcode -arch ${ARCH}"
-	export LC_CTYPE=C
+	export CC="${BUILD_TOOLS}/usr/bin/gcc"
+    export CFLAGS="-arch ${ARCH} -pipe -Os -gdwarf-2 -isysroot ${CROSS_TOP}/SDKs/${CROSS_SDK} -miphoneos-version-min=${IOS_MIN_SDK_VERSION} ${CC_BITCODE_FLAG}"
+	export LDFLAGS="-arch ${ARCH} -isysroot ${CROSS_TOP}/SDKs/${CROSS_SDK}"
 
 	echo -e "${subbold}Building ${LIBRESSL_VERSION} for ${PLATFORM} ${TVOS_SDK_VERSION} ${archbold}${ARCH}${dim}"
-	
-	# Patch Configure to build for tvOS, not iOS
-	LANG=C sed -i -- 's/D\_REENTRANT\:iOS/D\_REENTRANT\:tvOS/' "./Configure"
-	chmod u+x ./Configure
 
-	if [[ "${ARCH}" == "x86_64" ]]; then
-		./Configure --disable-asm --host="${ARCH}-apple-darwin" --enable-shared=false --prefix="/tmp/${LIBRESSL_VERSION}-tvOS-${ARCH}" --with-openssldir="/tmp/${LIBRESSL_VERSION}-tvOS-${ARCH}" $CUSTOMCONFIG &> "/tmp/${LIBRESSL_VERSION}-tvOS-${ARCH}.log"
+	if [[ "${ARCH}" == "arm64" || "${ARCH}" == "arm64e" ]]; then
+		./Configure  --host="arm-apple-darwin" --enable-shared=false --prefix="/tmp/${LIBRESSL_VERSION}-tvOS-${ARCH}" --with-openssldir="/tmp/${LIBRESSL_VERSION}-tvOS-${ARCH}" $CUSTOMCONFIG &> "/tmp/${LIBRESSL_VERSION}-tvOS-${ARCH}.log"
 	else
-		export CC="${BUILD_TOOLS}/usr/bin/gcc"
-		./Configure --host="arm-apple-darwin" DSO_LDFLAGS=-fembed-bitcode --prefix="/tmp/${LIBRESSL_VERSION}-tvOS-${ARCH}" --enable-shared=false --with-openssldir="/tmp/${LIBRESSL_VERSION}-tvOS-${ARCH}" $CUSTOMCONFIG &> "/tmp/${LIBRESSL_VERSION}-tvOS-${ARCH}.log"
-	fi
-	# add -isysroot to CC=
-	sed -ie "s!^CFLAGS=!CFLAGS=-isysroot ${CROSS_TOP}/SDKs/${CROSS_SDK} -mtvos-version-min=${TVOS_MIN_SDK_VERSION} !" "Makefile"
+	    ./Configure  --host="${ARCH}-apple-darwin" --enable-shared=false --prefix="/tmp/${LIBRESSL_VERSION}-tvOS-${ARCH}" --with-openssldir="/tmp/${LIBRESSL_VERSION}-tvOS-${ARCH}" $CUSTOMCONFIG &> "/tmp/${LIBRESSL_VERSION}-tvOS-${ARCH}.log"
+	fi 
 
-	make >> "/tmp/${LIBRESSL_VERSION}-tvOS-${ARCH}.log" 2>&1
+	make -j8>> "/tmp/${LIBRESSL_VERSION}-tvOS-${ARCH}.log" 2>&1
 	make install >> "/tmp/${LIBRESSL_VERSION}-tvOS-${ARCH}.log" 2>&1
 	make clean >> "/tmp/${LIBRESSL_VERSION}-tvOS-${ARCH}.log" 2>&1
 	popd > /dev/null
@@ -217,49 +210,49 @@ if [ "$engine" == "1" ]; then
 	sed -ie 's/\"engine/\"dynamic-engine/' ${LIBRESSL_VERSION}/Configurations/15-ios.conf
 fi
 
-# echo -e "${bold}Building Mac libraries${dim}"
-# buildMac "x86_64"
+echo -e "${bold}Building Mac libraries${dim}"
+buildMac "x86_64"
 
-# echo "Copying headers and libraries"
-# cp /tmp/${LIBRESSL_VERSION}-x86_64/include/openssl/* Mac/include/openssl/
+echo "Copying headers and libraries"
+cp /tmp/${LIBRESSL_VERSION}-x86_64/include/openssl/* Mac/include/openssl/
 
-# lipo \
-# 	"/tmp/${LIBRESSL_VERSION}-x86_64/lib/libcrypto.a" \
-# 	-create -output Mac/lib/libcrypto.a
+lipo \
+	"/tmp/${LIBRESSL_VERSION}-x86_64/lib/libcrypto.a" \
+	-create -output Mac/lib/libcrypto.a
 
-# lipo \
-# 	"/tmp/${LIBRESSL_VERSION}-x86_64/lib/libssl.a" \
-# 	-create -output Mac/lib/libssl.a
+lipo \
+	"/tmp/${LIBRESSL_VERSION}-x86_64/lib/libssl.a" \
+	-create -output Mac/lib/libssl.a
 
-# echo -e "${bold}Building iOS libraries${dim}"
+echo -e "${bold}Building iOS libraries${dim}"
 
-# buildIOS "armv7"
-# buildIOS "armv7s"
-# buildIOS "arm64"
-# buildIOS "arm64e"
-# buildIOS "i386"
-# buildIOS "x86_64"
+buildIOS "i386"
+buildIOS "x86_64"
+buildIOS "armv7"
+buildIOS "armv7s"
+buildIOS "arm64"
+buildIOS "arm64e"
 
-# echo "  Copying headers and libraries"
-# cp /tmp/${LIBRESSL_VERSION}-iOS-arm64/include/openssl/* iOS/include/openssl/
+echo "  Copying headers and libraries"
+cp /tmp/${LIBRESSL_VERSION}-iOS-arm64/include/openssl/* iOS/include/openssl/
 
-# lipo \
-# 	"/tmp/${LIBRESSL_VERSION}-iOS-armv7/lib/libcrypto.a" \
-# 	"/tmp/${LIBRESSL_VERSION}-iOS-armv7s/lib/libcrypto.a" \
-# 	"/tmp/${LIBRESSL_VERSION}-iOS-i386/lib/libcrypto.a" \
-# 	"/tmp/${LIBRESSL_VERSION}-iOS-arm64/lib/libcrypto.a" \
-# 	"/tmp/${LIBRESSL_VERSION}-iOS-arm64e/lib/libcrypto.a" \
-# 	"/tmp/${LIBRESSL_VERSION}-iOS-x86_64/lib/libcrypto.a" \
-# 	-create -output iOS/lib/libcrypto.a
+lipo \
+	"/tmp/${LIBRESSL_VERSION}-iOS-armv7/lib/libcrypto.a" \
+	"/tmp/${LIBRESSL_VERSION}-iOS-armv7s/lib/libcrypto.a" \
+	"/tmp/${LIBRESSL_VERSION}-iOS-i386/lib/libcrypto.a" \
+	"/tmp/${LIBRESSL_VERSION}-iOS-arm64/lib/libcrypto.a" \
+	"/tmp/${LIBRESSL_VERSION}-iOS-arm64e/lib/libcrypto.a" \
+	"/tmp/${LIBRESSL_VERSION}-iOS-x86_64/lib/libcrypto.a" \
+	-create -output iOS/lib/libcrypto.a
 
-# lipo \
-# 	"/tmp/${LIBRESSL_VERSION}-iOS-armv7/lib/libssl.a" \
-# 	"/tmp/${LIBRESSL_VERSION}-iOS-armv7s/lib/libssl.a" \
-# 	"/tmp/${LIBRESSL_VERSION}-iOS-i386/lib/libssl.a" \
-# 	"/tmp/${LIBRESSL_VERSION}-iOS-arm64/lib/libssl.a" \
-# 	"/tmp/${LIBRESSL_VERSION}-iOS-arm64e/lib/libssl.a" \
-# 	"/tmp/${LIBRESSL_VERSION}-iOS-x86_64/lib/libssl.a" \
-# 	-create -output iOS/lib/libssl.a
+lipo \
+	"/tmp/${LIBRESSL_VERSION}-iOS-armv7/lib/libssl.a" \
+	"/tmp/${LIBRESSL_VERSION}-iOS-armv7s/lib/libssl.a" \
+	"/tmp/${LIBRESSL_VERSION}-iOS-i386/lib/libssl.a" \
+	"/tmp/${LIBRESSL_VERSION}-iOS-arm64/lib/libssl.a" \
+	"/tmp/${LIBRESSL_VERSION}-iOS-arm64e/lib/libssl.a" \
+	"/tmp/${LIBRESSL_VERSION}-iOS-x86_64/lib/libssl.a" \
+	-create -output iOS/lib/libssl.a
 
 
 echo -e "${bold}Building tvOS libraries${dim}"
